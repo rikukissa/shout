@@ -309,7 +309,7 @@ $(function() {
 			break;
 		}
 	});
-	
+
 	socket.on("topic", function(data) {
 		$("#chan-" + data.chan).find(".header .topic").html(data.topic);
 	});
@@ -397,6 +397,85 @@ $(function() {
 	var input = $("#input")
 		.history()
 		.tab(complete, {hint: false});
+
+
+	function blobToDataURL(blob) {
+		var deferred = $.Deferred();
+
+		var fileReader = new FileReader();
+
+		fileReader.onload = function(event) {
+			deferred.resolve(event.target.result);
+		}
+
+		fileReader.onerror = function(err) {
+			deferred.reject(err);
+		}
+
+		fileReader.readAsDataURL(blob);
+
+		return deferred.promise();
+	}
+
+
+	function uploadToImgur(dataURLs) {
+
+		return $.when.apply($, dataURLs.map(function(dataURL) {
+
+			var base64 = dataURL.substr(dataURL.indexOf('iVBOR'));
+
+			return $.ajax({
+				url: 'https://api.imgur.com/3/image',
+				type: 'post',
+				headers: {
+					'Authorization': 'Client-ID TODO'
+				},
+				data: {
+					image: base64,
+					type: 'base64'
+				}
+			}).then(function(res) {
+				return res.data.link;
+			});
+
+		})).then(function() {
+			return Array.prototype.slice.call(arguments, 0);
+		});
+	}
+
+	input.on('paste', function() {
+		var items = (event.clipboardData || event.originalEvent.clipboardData).items;
+
+		var deferreds = [];
+
+		for(var i = 0; i < items.length; i++) {
+			var blob = items[i].getAsFile();
+			if(!blob) {
+				continue;
+			}
+			deferreds.push(blobToDataURL(blob));
+		}
+
+		$.when.apply($, deferreds).then(function() {
+			var results = Array.prototype.slice.call(arguments, 0);
+
+			var dataURLs = results.filter(function(result) {
+				return result && result.indexOf('image') > -1;
+			});
+
+			if(dataURLs.length === 0) {
+				return;
+			}
+
+			return uploadToImgur(dataURLs);
+		}, function(err) {
+			// TODO
+			console.log(err);
+		}).then(function(links) {
+			input.val(input.val() + links.join(' '));
+		});
+	});
+
 
 	var form = $("#form");
 	var submit = $("#submit");
@@ -685,7 +764,7 @@ $(function() {
 			event, values
 		);
 	});
-	
+
 	forms.on("input", ".nick", function() {
 		var nick = $(this).val();
 		forms.find(".username").val(nick);
